@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ufa-aec-possessions"
+version = "0.1.0"
+description = "Analyze high-aEC UFA possessions and connect possession stats to path diagrams."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "ipywidgets",
+    "numpy",
+    "pandas",
+    "plotly",
+    "requests",
+    "scikit-learn",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
