@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from html import escape
 
@@ -57,7 +57,7 @@ def _add_field_shapes(fig):
         y0=FIELD_Y_MIN,
         y1=FIELD_Y_MAX,
         line={"color": "#1B1E26", "width": 2},
-        fillcolor="#eef7ef",
+        fillcolor="#86d973",
         layer="below",
     )
     for y_value in [ENDZONE_LOW_Y, ENDZONE_HIGH_Y]:
@@ -123,7 +123,7 @@ def _apply_field_layout(fig, title: str, width: int = 540, height: int = 760):
         title=title,
         width=width,
         height=height,
-        plot_bgcolor="#ffffff",
+        plot_bgcolor="#f6faf5",
         paper_bgcolor="#ffffff",
         margin={"l": 10, "r": 10, "t": 48, "b": 10},
         legend={"orientation": "h", "y": -0.04},
@@ -200,7 +200,7 @@ def render_shownspace_possession_svg(path: pd.DataFrame, width: int = 260, heigh
         return top + scale * field_height
 
     shapes = [
-        f'<rect x="{left:.2f}" y="{top:.2f}" width="{field_width:.2f}" height="{field_height:.2f}" rx="4" fill="#eef7ef" stroke="#1B1E26" stroke-width="2" />'
+        f'<rect x="{left:.2f}" y="{top:.2f}" width="{field_width:.2f}" height="{field_height:.2f}" rx="4" fill="#86d973" stroke="#1B1E26" stroke-width="2" />'
     ]
     for y_value in [ENDZONE_LOW_Y, ENDZONE_HIGH_Y]:
         shapes.append(
