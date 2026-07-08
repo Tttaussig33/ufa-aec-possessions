@@ -19,6 +19,18 @@ Analyze a team from the command line:
 python scripts\analyze_team.py --team glory --season 2026 --top 5 --middle 5
 ```
 
+Analyze every team and print each team's top five qualifying possessions:
+
+```powershell
+python scripts\analyze_team.py --all-teams --season 2026 --top 5
+```
+
+Optionally write one overlay HTML file per team:
+
+```powershell
+python scripts\analyze_team.py --all-teams --season 2026 --top 5 --output-dir outputs\league_top5
+```
+
 Or open `notebooks/01_team_aec_possession_shapes.ipynb` and run the cells interactively.
 
 ## Default Analysis

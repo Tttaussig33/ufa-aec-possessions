@@ -10,6 +10,7 @@ from ufa_aec_possessions import (
     filter_analysis_possessions,
     select_middle_aec_possessions,
     select_top_aec_possessions,
+    select_top_aec_possessions_by_team,
 )
 
 
@@ -90,6 +91,41 @@ def test_middle_selection_centers_ranked_window_and_aligns_paths():
 
     top, _ = select_top_aec_possessions(possessions, paths, n=2)
     assert top["possession_id"].tolist() == ["p0", "p4"]
+
+
+def test_top_selection_by_team_returns_ranked_rows_and_paths():
+    possessions = pd.DataFrame(
+        {
+            "possession_id": ["g1", "g2", "g3", "b1", "b2", "b3"],
+            "team_id": ["glory", "glory", "glory", "breeze", "breeze", "breeze"],
+            "outcome": ["goal"] * 6,
+            "line_type": ["o_line"] * 6,
+            "start_y": [30] * 6,
+            "field_progress": [70] * 6,
+            "huck_count": [0] * 6,
+            "throw_count": [3] * 6,
+            "aec_per_throw": [0.2, 0.5, 0.3, 0.4, 0.1, 0.6],
+        }
+    )
+    paths = [
+        pd.DataFrame({"possession_id": [possession_id], "possession_throw": [1]})
+        for possession_id in possessions["possession_id"]
+    ]
+
+    top_by_team, paths_by_team = select_top_aec_possessions_by_team(
+        possessions,
+        paths,
+        n=2,
+        add_shape_features=False,
+    )
+
+    glory = top_by_team[top_by_team["team_id"].eq("glory")]
+    breeze = top_by_team[top_by_team["team_id"].eq("breeze")]
+    assert glory["possession_id"].tolist() == ["g2", "g3"]
+    assert glory["team_rank"].tolist() == [1, 2]
+    assert breeze["possession_id"].tolist() == ["b3", "b1"]
+    assert [path["possession_id"].iloc[0] for path in paths_by_team["glory"]] == ["g2", "g3"]
+    assert [path["possession_id"].iloc[0] for path in paths_by_team["breeze"]] == ["b3", "b1"]
 
 
 def test_shape_features_describe_path_geometry():

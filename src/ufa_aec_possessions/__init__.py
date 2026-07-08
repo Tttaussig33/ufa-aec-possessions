@@ -18,6 +18,7 @@ from ufa_aec_possessions.possessions import (
 from ufa_aec_possessions.selection import (
     build_aec_possession_sets,
     filter_analysis_possessions,
+    select_top_aec_possessions_by_team,
     select_middle_aec_possessions,
     select_top_aec_possessions,
 )
@@ -38,4 +39,5 @@ __all__ = [
     "render_shownspace_possession_svg",
     "select_middle_aec_possessions",
     "select_top_aec_possessions",
+    "select_top_aec_possessions_by_team",
 ]

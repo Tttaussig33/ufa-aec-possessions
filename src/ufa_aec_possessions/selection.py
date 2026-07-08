@@ -110,3 +110,48 @@ def build_aec_possession_sets(
     middle = select_middle_aec_possessions(filtered, filtered_paths, metric=metric, count=middle_count)
     return {"filtered": (filtered, filtered_paths), "highest": highest, "middle": middle}
 
+
+def select_top_aec_possessions_by_team(
+    possessions: pd.DataFrame,
+    paths: list[pd.DataFrame],
+    *,
+    metric: str = DEFAULT_METRIC,
+    n: int = 5,
+    add_shape_features: bool = True,
+    **filter_kwargs,
+) -> tuple[pd.DataFrame, dict[str, list[pd.DataFrame]]]:
+    """Select each team's top ranked possessions from one league-wide pool."""
+    filtered, filtered_paths = filter_analysis_possessions(
+        possessions,
+        paths,
+        team_id=None,
+        **filter_kwargs,
+    )
+    if filtered.empty:
+        return filtered, {}
+
+    if add_shape_features:
+        filtered = add_possession_shape_features(filtered, filtered_paths)
+
+    team_rows = []
+    paths_by_team: dict[str, list[pd.DataFrame]] = {}
+    for team_id, team_possessions in filtered.groupby("team_id", dropna=False):
+        team_label = str(team_id)
+        selected, selected_paths = select_top_aec_possessions(
+            team_possessions,
+            filtered_paths,
+            metric=metric,
+            n=n,
+        )
+        selected = selected.copy()
+        selected["team_rank"] = range(1, len(selected) + 1)
+        team_rows.append(selected)
+        paths_by_team[team_label] = selected_paths
+
+    if not team_rows:
+        return pd.DataFrame(), {}
+
+    league_top = pd.concat(team_rows, ignore_index=True)
+    sort_columns = ["team_id", "team_rank"]
+    return league_top.sort_values(sort_columns).reset_index(drop=True), paths_by_team
+
