@@ -12,8 +12,10 @@ if str(SRC_DIR) not in sys.path:
 from ufa_aec_possessions import (  # noqa: E402
     build_aec_possession_sets,
     build_scoring_possessions,
+    compare_top_aec_metrics_by_team,
     fetch_shownspace_season_throws,
     plot_representative_paths,
+    plot_side_by_side_paths,
     select_top_aec_possessions_by_team,
 )
 
@@ -89,17 +91,51 @@ def main() -> int:
         print(top_by_team.reindex(columns=columns).to_string(index=False))
 
         if args.output_dir is not None:
+            comparison = compare_top_aec_metrics_by_team(
+                possessions,
+                paths,
+                metrics=("aec_per_throw", "total_aec"),
+                n=args.top,
+                exclude_hucks=not args.include_hucks,
+                line_type=None if args.all_lines else "o_line",
+            )
+            by_metric = comparison["by_metric"]
+            per_throw_top, per_throw_paths_by_team = by_metric["aec_per_throw"]
+            total_top, total_paths_by_team = by_metric["total_aec"]
             args.output_dir.mkdir(parents=True, exist_ok=True)
-            for team_id, team_possessions in top_by_team.groupby("team_id"):
-                team_paths = paths_by_team.get(str(team_id), [])
-                labeled = _label_paths(team_possessions, team_paths, "top", args.metric)
-                if not labeled:
-                    continue
-                fig = plot_representative_paths(
-                    labeled,
-                    title=f"{str(team_id).title()} top {len(labeled)} non-huck long-field scoring possessions",
+            team_ids = sorted(
+                set(per_throw_top["team_id"].dropna().astype(str))
+                | set(total_top["team_id"].dropna().astype(str))
+            )
+            for team_id in team_ids:
+                per_throw_possessions = per_throw_top[
+                    per_throw_top["team_id"].astype(str).eq(team_id)
+                ]
+                total_possessions = total_top[
+                    total_top["team_id"].astype(str).eq(team_id)
+                ]
+                per_throw_labeled = _label_paths(
+                    per_throw_possessions,
+                    per_throw_paths_by_team.get(team_id, []),
+                    "aEC/T",
+                    "aec_per_throw",
                 )
-                output_path = args.output_dir / f"{team_id}_top_aec_possessions.html"
+                total_labeled = _label_paths(
+                    total_possessions,
+                    total_paths_by_team.get(team_id, []),
+                    "Tot",
+                    "total_aec",
+                )
+                if not per_throw_labeled and not total_labeled:
+                    continue
+                fig = plot_side_by_side_paths(
+                    per_throw_labeled,
+                    total_labeled,
+                    left_title="Top 5 by aEC per throw",
+                    right_title="Top 5 by total aEC",
+                    title=f"{team_id.title()} top non-huck long-field scoring possessions",
+                )
+                output_path = args.output_dir / f"{team_id}_top_aec_comparison.html"
                 fig.write_html(output_path)
                 print(f"Wrote {output_path}")
         return 0

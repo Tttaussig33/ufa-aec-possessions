@@ -2,7 +2,11 @@
 
 import pandas as pd
 
-from ufa_aec_possessions.plotting import plot_possession_path, render_shownspace_possession_svg
+from ufa_aec_possessions.plotting import (
+    plot_possession_path,
+    plot_side_by_side_paths,
+    render_shownspace_possession_svg,
+)
 
 
 def test_plotting_smoke():
@@ -27,3 +31,28 @@ def test_plotting_smoke():
     svg = render_shownspace_possession_svg(path)
     assert "<svg" in svg
     assert "aEC 0.200" in svg
+
+
+def test_side_by_side_plotting_smoke():
+    path = pd.DataFrame(
+        {
+            "possession_id": ["p1", "p1"],
+            "possession_throw": [1, 2],
+            "Thrower": ["a", "b"],
+            "Receiver": ["b", "c"],
+            "ThrowerX": [0, 5],
+            "ThrowerY": [30, 60],
+            "ReceiverX": [5, 0],
+            "ReceiverY": [60, 105],
+            "aec": [0.2, 0.4],
+            "cp": [0.95, 0.90],
+            "throw_distance": [30.4, 45.3],
+        }
+    )
+
+    fig = plot_side_by_side_paths(
+        {"aEC/T 1: 0.300": path},
+        {"total 1: 0.600": path},
+    )
+    assert len(fig.data) == 2
+    assert fig.layout.title.text == "Top scoring possessions"

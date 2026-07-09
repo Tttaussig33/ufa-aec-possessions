@@ -155,3 +155,69 @@ def select_top_aec_possessions_by_team(
     sort_columns = ["team_id", "team_rank"]
     return league_top.sort_values(sort_columns).reset_index(drop=True), paths_by_team
 
+
+def compare_top_aec_metrics_by_team(
+    possessions: pd.DataFrame,
+    paths: list[pd.DataFrame],
+    *,
+    metrics: tuple[str, str] = ("aec_per_throw", "total_aec"),
+    n: int = 5,
+    add_shape_features: bool = True,
+    **filter_kwargs,
+) -> dict[str, object]:
+    """Compare each team's top possessions under two AEC ranking metrics."""
+    if len(metrics) != 2:
+        raise ValueError("compare_top_aec_metrics_by_team expects exactly two metrics")
+
+    by_metric: dict[str, tuple[pd.DataFrame, dict[str, list[pd.DataFrame]]]] = {}
+    id_sets_by_metric: dict[str, dict[str, set[str]]] = {}
+    for metric in metrics:
+        top_possessions, paths_by_team = select_top_aec_possessions_by_team(
+            possessions,
+            paths,
+            metric=metric,
+            n=n,
+            add_shape_features=add_shape_features,
+            **filter_kwargs,
+        )
+        top_possessions = top_possessions.copy()
+        top_possessions["selection_metric"] = metric
+        if not top_possessions.empty:
+            top_possessions["selection_value"] = pd.to_numeric(
+                top_possessions[metric],
+                errors="coerce",
+            )
+        by_metric[metric] = (top_possessions, paths_by_team)
+        id_sets_by_metric[metric] = {
+            str(team_id): set(group["possession_id"].astype(str))
+            for team_id, group in top_possessions.groupby("team_id", dropna=False)
+        }
+
+    first_metric, second_metric = metrics
+    team_ids = sorted(
+        set(id_sets_by_metric[first_metric]) | set(id_sets_by_metric[second_metric])
+    )
+    overlap_rows = []
+    for team_id in team_ids:
+        first_ids = id_sets_by_metric[first_metric].get(team_id, set())
+        second_ids = id_sets_by_metric[second_metric].get(team_id, set())
+        overlap_ids = first_ids & second_ids
+        denominator = min(len(first_ids), len(second_ids)) or 1
+        overlap_rows.append(
+            {
+                "team_id": team_id,
+                f"{first_metric}_count": len(first_ids),
+                f"{second_metric}_count": len(second_ids),
+                "overlap_count": len(overlap_ids),
+                "overlap_share": len(overlap_ids) / denominator,
+                f"only_{first_metric}": sorted(first_ids - second_ids),
+                f"only_{second_metric}": sorted(second_ids - first_ids),
+                "overlap_possession_ids": sorted(overlap_ids),
+            }
+        )
+
+    return {
+        "by_metric": by_metric,
+        "overlap": pd.DataFrame(overlap_rows),
+    }
+

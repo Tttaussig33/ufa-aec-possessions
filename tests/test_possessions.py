@@ -7,6 +7,7 @@ import pytest
 from ufa_aec_possessions import (
     add_possession_shape_features,
     build_possessions,
+    compare_top_aec_metrics_by_team,
     filter_analysis_possessions,
     select_middle_aec_possessions,
     select_top_aec_possessions,
@@ -126,6 +127,45 @@ def test_top_selection_by_team_returns_ranked_rows_and_paths():
     assert breeze["possession_id"].tolist() == ["b3", "b1"]
     assert [path["possession_id"].iloc[0] for path in paths_by_team["glory"]] == ["g2", "g3"]
     assert [path["possession_id"].iloc[0] for path in paths_by_team["breeze"]] == ["b3", "b1"]
+
+
+def test_compare_top_aec_metrics_by_team_reports_overlap():
+    possessions = pd.DataFrame(
+        {
+            "possession_id": ["g_short", "g_total", "g_low", "b_same", "b_other"],
+            "team_id": ["glory", "glory", "glory", "breeze", "breeze"],
+            "outcome": ["goal"] * 5,
+            "line_type": ["o_line"] * 5,
+            "start_y": [30] * 5,
+            "field_progress": [70] * 5,
+            "huck_count": [0] * 5,
+            "throw_count": [2, 8, 5, 3, 6],
+            "aec_per_throw": [0.6, 0.3, 0.2, 0.4, 0.3],
+            "total_aec": [1.2, 2.4, 1.0, 1.2, 1.8],
+        }
+    )
+    paths = [
+        pd.DataFrame({"possession_id": [possession_id], "possession_throw": [1]})
+        for possession_id in possessions["possession_id"]
+    ]
+
+    comparison = compare_top_aec_metrics_by_team(
+        possessions,
+        paths,
+        n=1,
+        add_shape_features=False,
+    )
+
+    per_throw_top, _ = comparison["by_metric"]["aec_per_throw"]
+    total_top, _ = comparison["by_metric"]["total_aec"]
+    overlap = comparison["overlap"].set_index("team_id")
+
+    assert per_throw_top[per_throw_top["team_id"].eq("glory")]["possession_id"].tolist() == ["g_short"]
+    assert total_top[total_top["team_id"].eq("glory")]["possession_id"].tolist() == ["g_total"]
+    assert overlap.loc["glory", "overlap_count"] == 0
+    assert overlap.loc["breeze", "overlap_count"] == 0
+    assert overlap.loc["glory", "only_aec_per_throw"] == ["g_short"]
+    assert overlap.loc["glory", "only_total_aec"] == ["g_total"]
 
 
 def test_shape_features_describe_path_geometry():

@@ -49,7 +49,8 @@ def _path_hover_text(path: pd.DataFrame) -> list[str]:
     return text
 
 
-def _add_field_shapes(fig):
+def _add_field_shapes(fig, row: int | None = None, col: int | None = None):
+    shape_kwargs = {"row": row, "col": col} if row is not None and col is not None else {}
     fig.add_shape(
         type="rect",
         x0=FIELD_X_MIN,
@@ -59,6 +60,7 @@ def _add_field_shapes(fig):
         line={"color": "#1B1E26", "width": 2},
         fillcolor="#86d973",
         layer="below",
+        **shape_kwargs,
     )
     for y_value in [ENDZONE_LOW_Y, ENDZONE_HIGH_Y]:
         fig.add_shape(
@@ -69,6 +71,7 @@ def _add_field_shapes(fig):
             y1=y_value,
             line={"color": "#1B1E26", "width": 1},
             layer="below",
+            **shape_kwargs,
         )
     for x_value in [-8.88, 8.88]:
         fig.add_shape(
@@ -79,29 +82,44 @@ def _add_field_shapes(fig):
             y1=ENDZONE_HIGH_Y,
             line={"color": "#b9c8bb", "width": 1, "dash": "dot"},
             layer="below",
+            **shape_kwargs,
         )
 
 
-def _add_path_arrows(fig, points: pd.DataFrame, color: str, every: int = 1, opacity: float = 0.85):
+def _add_path_arrows(
+    fig,
+    points: pd.DataFrame,
+    color: str,
+    every: int = 1,
+    opacity: float = 0.85,
+    row: int | None = None,
+    col: int | None = None,
+):
     for index, (start, end) in enumerate(zip(points.iloc[:-1].itertuples(), points.iloc[1:].itertuples())):
         if index % every != 0:
             continue
-        fig.add_annotation(
-            x=end.x,
-            y=end.y,
-            ax=start.x,
-            ay=start.y,
-            xref="x",
-            yref="y",
-            axref="x",
-            ayref="y",
-            showarrow=True,
-            arrowhead=3,
-            arrowsize=1,
-            arrowwidth=1.8,
-            arrowcolor=color,
-            opacity=opacity,
-        )
+        annotation = {
+            "x": end.x,
+            "y": end.y,
+            "ax": start.x,
+            "ay": start.y,
+            "showarrow": True,
+            "arrowhead": 3,
+            "arrowsize": 1,
+            "arrowwidth": 1.8,
+            "arrowcolor": color,
+            "opacity": opacity,
+        }
+        if row is not None and col is not None:
+            fig.add_annotation(**annotation, row=row, col=col)
+        else:
+            fig.add_annotation(
+                **annotation,
+                xref="x",
+                yref="y",
+                axref="x",
+                ayref="y",
+            )
 
 
 def _apply_field_layout(fig, title: str, width: int = 540, height: int = 760):
@@ -181,6 +199,80 @@ def plot_representative_paths(
         )
         _add_path_arrows(fig, points, color, every=2, opacity=0.65)
     return _apply_field_layout(fig, title, width=680)
+
+
+def plot_side_by_side_paths(
+    left_paths: dict[str, pd.DataFrame],
+    right_paths: dict[str, pd.DataFrame],
+    *,
+    left_title: str = "aEC per throw",
+    right_title: str = "Total aEC",
+    title: str = "Top scoring possessions",
+):
+    """Plot two possession-path overlays side by side for metric comparison."""
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+
+    colors = ["#b74126", "#164e87", "#7a3db8", "#2f7d32", "#d97706", "#0f766e"]
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        subplot_titles=[left_title, right_title],
+        horizontal_spacing=0.08,
+    )
+
+    for col, path_group in enumerate([left_paths, right_paths], start=1):
+        _add_field_shapes(fig, row=1, col=col)
+        for index, (label, path) in enumerate(path_group.items()):
+            color = colors[index % len(colors)]
+            points = _path_points(path)
+            fig.add_trace(
+                go.Scatter(
+                    x=points["x"],
+                    y=points["y"],
+                    mode="lines+markers",
+                    line={"color": color, "width": 3},
+                    marker={"size": 7, "color": color},
+                    text=["Start"] + _path_hover_text(path),
+                    hovertemplate=f"{escape(str(label))}<br>%{{text}}<extra></extra>",
+                    name=str(label),
+                    legendgroup=f"side-{col}-{index}",
+                    showlegend=True,
+                ),
+                row=1,
+                col=col,
+            )
+            _add_path_arrows(fig, points, color, every=2, opacity=0.65, row=1, col=col)
+
+        fig.update_xaxes(
+            range=[FIELD_X_MIN - 5, FIELD_X_MAX + 5],
+            showgrid=False,
+            zeroline=False,
+            visible=False,
+            scaleanchor=f"y{col if col > 1 else ''}",
+            scaleratio=1,
+            row=1,
+            col=col,
+        )
+        fig.update_yaxes(
+            range=[FIELD_Y_MIN - 3, FIELD_Y_MAX + 3],
+            showgrid=False,
+            zeroline=False,
+            visible=False,
+            row=1,
+            col=col,
+        )
+
+    fig.update_layout(
+        title=title,
+        width=1180,
+        height=760,
+        plot_bgcolor="#f6faf5",
+        paper_bgcolor="#ffffff",
+        margin={"l": 20, "r": 20, "t": 70, "b": 10},
+        legend={"orientation": "h", "y": -0.04},
+    )
+    return fig
 
 
 def render_shownspace_possession_svg(path: pd.DataFrame, width: int = 260, height: int = 560) -> str:

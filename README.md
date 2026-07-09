@@ -25,7 +25,7 @@ Analyze every team and print each team's top five qualifying possessions:
 python scripts\analyze_team.py --all-teams --season 2026 --top 5
 ```
 
-Optionally write one overlay HTML file per team:
+Optionally write one side-by-side comparison HTML file per team:
 
 ```powershell
 python scripts\analyze_team.py --all-teams --season 2026 --top 5 --output-dir outputs\league_top5
