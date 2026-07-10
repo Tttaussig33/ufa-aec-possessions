@@ -30,9 +30,12 @@ def _format_percent(value) -> str:
 def _path_hover_text(path: pd.DataFrame) -> list[str]:
     thrower = path.get("Thrower", path.get("thrower", pd.Series("", index=path.index)))
     receiver = path.get("Receiver", path.get("receiver", pd.Series("", index=path.index)))
-    aec = pd.to_numeric(path.get("aec"), errors="coerce")
-    cp = pd.to_numeric(path.get("cp"), errors="coerce")
-    yards = pd.to_numeric(path.get("throw_distance"), errors="coerce")
+    aec = pd.to_numeric(path.get("aec", pd.Series(index=path.index, dtype=float)), errors="coerce")
+    cp = pd.to_numeric(path.get("cp", pd.Series(index=path.index, dtype=float)), errors="coerce")
+    yards = pd.to_numeric(
+        path.get("throw_distance", pd.Series(index=path.index, dtype=float)),
+        errors="coerce",
+    )
 
     text = []
     for throw_number, (_, row) in enumerate(path.iterrows(), start=1):
@@ -175,6 +178,7 @@ def plot_possession_path(path: pd.DataFrame, title: str = "Scoring possession pa
 def plot_representative_paths(
     representative_paths: dict[str, pd.DataFrame],
     title: str = "Representative scoring path styles",
+    show_arrows: bool = False,
 ):
     """Overlay multiple real possession paths on one field."""
     import plotly.graph_objects as go
@@ -197,7 +201,8 @@ def plot_representative_paths(
                 name=str(label),
             )
         )
-        _add_path_arrows(fig, points, color, every=2, opacity=0.65)
+        if show_arrows:
+            _add_path_arrows(fig, points, color, every=2, opacity=0.65)
     return _apply_field_layout(fig, title, width=680)
 
 
@@ -208,6 +213,7 @@ def plot_side_by_side_paths(
     left_title: str = "aEC per throw",
     right_title: str = "Total aEC",
     title: str = "Top scoring possessions",
+    show_arrows: bool = False,
 ):
     """Plot two possession-path overlays side by side for metric comparison."""
     import plotly.graph_objects as go
@@ -242,7 +248,16 @@ def plot_side_by_side_paths(
                 row=1,
                 col=col,
             )
-            _add_path_arrows(fig, points, color, every=2, opacity=0.65, row=1, col=col)
+            if show_arrows:
+                _add_path_arrows(
+                    fig,
+                    points,
+                    color,
+                    every=2,
+                    opacity=0.65,
+                    row=1,
+                    col=col,
+                )
 
         fig.update_xaxes(
             range=[FIELD_X_MIN - 5, FIELD_X_MAX + 5],
