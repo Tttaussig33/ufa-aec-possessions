@@ -51,8 +51,16 @@ def test_side_by_side_plotting_smoke():
     )
 
     fig = plot_side_by_side_paths(
-        {"aEC/T 1: 0.300": path},
-        {"total 1: 0.600": path},
+        {f"aEC/T {rank}: {0.300 - rank / 1000:.3f}": path for rank in range(1, 6)},
+        {f"total {rank}: {0.600 - rank / 1000:.3f}": path for rank in range(1, 6)},
     )
-    assert len(fig.data) == 2
+    assert len(fig.data) == 10
     assert fig.layout.title.text == "Top scoring possessions"
+    assert fig.layout.title.x == 0.5
+    assert fig.data[0].showlegend is False
+    left_footer = next(annotation.text for annotation in fig.layout.annotations if "<b>aEC per throw</b>" in annotation.text)
+    right_footer = next(annotation.text for annotation in fig.layout.annotations if "<b>Total aEC</b>" in annotation.text)
+    assert "aEC/T" not in left_footer
+    assert "total" not in right_footer
+    assert left_footer.count("<br>") == 1
+    assert right_footer.count("<br>") == 1

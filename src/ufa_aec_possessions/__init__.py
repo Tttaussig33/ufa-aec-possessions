@@ -1,4 +1,5 @@
-﻿from ufa_aec_possessions.fetching import (
+from ufa_aec_possessions.browser import create_team_aec_comparison_browser
+from ufa_aec_possessions.fetching import (
     fetch_shownspace_game_data,
     fetch_shownspace_games,
     fetch_shownspace_season_throws,
@@ -31,6 +32,7 @@ __all__ = [
     "build_possessions",
     "build_scoring_possessions",
     "calculate_possession_shape_features",
+    "create_team_aec_comparison_browser",
     "fetch_shownspace_game_data",
     "fetch_shownspace_games",
     "fetch_shownspace_season_throws",

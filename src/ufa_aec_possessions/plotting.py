@@ -27,6 +27,22 @@ def _format_percent(value) -> str:
     return f"{float(value):.1%}"
 
 
+def _metric_footer_text(title: str, labels, colors: list[str]) -> str:
+    items = []
+    for index, label in enumerate(labels):
+        label_text = str(label)
+        head, separator, value = label_text.partition(":")
+        if separator:
+            rank = head.strip().split()[-1]
+            text = f"{escape(rank)}: {escape(value.strip())}"
+        else:
+            text = escape(label_text)
+        color = colors[index % len(colors)]
+        items.append(f'<span style="color:{color}">{text}</span>')
+    value_text = " &nbsp;&nbsp; ".join(items) if items else "-"
+    return f"<b>{escape(title)}</b><br>{value_text}"
+
+
 def _path_hover_text(path: pd.DataFrame) -> list[str]:
     thrower = path.get("Thrower", path.get("thrower", pd.Series("", index=path.index)))
     receiver = path.get("Receiver", path.get("receiver", pd.Series("", index=path.index)))
@@ -243,7 +259,7 @@ def plot_side_by_side_paths(
                     hovertemplate=f"{escape(str(label))}<br>%{{text}}<extra></extra>",
                     name=str(label),
                     legendgroup=f"side-{col}-{index}",
-                    showlegend=True,
+                    showlegend=False,
                 ),
                 row=1,
                 col=col,
@@ -278,14 +294,36 @@ def plot_side_by_side_paths(
             col=col,
         )
 
+    fig.add_annotation(
+        text=_metric_footer_text(left_title, left_paths.keys(), colors),
+        x=0.25,
+        y=-0.07,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+        align="center",
+        font={"size": 11, "color": "#1f3558"},
+        xanchor="center",
+    )
+    fig.add_annotation(
+        text=_metric_footer_text(right_title, right_paths.keys(), colors),
+        x=0.75,
+        y=-0.07,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+        align="center",
+        font={"size": 11, "color": "#1f3558"},
+        xanchor="center",
+    )
     fig.update_layout(
-        title=title,
+        title={"text": title, "x": 0.5, "xanchor": "center"},
         width=1180,
         height=760,
         plot_bgcolor="#f6faf5",
         paper_bgcolor="#ffffff",
-        margin={"l": 20, "r": 20, "t": 70, "b": 10},
-        legend={"orientation": "h", "y": -0.04},
+        margin={"l": 20, "r": 20, "t": 70, "b": 76},
+        showlegend=False,
     )
     return fig
 
