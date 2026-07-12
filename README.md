@@ -33,6 +33,9 @@ python scripts\analyze_team.py --all-teams --season 2026 --top 5 --output-dir ou
 
 Or open `notebooks/01_team_aec_possession_shapes.ipynb` and run the cells interactively.
 
+For team-level aEC/T rankings, open `notebooks/02_team_aec_t_leaderboard.ipynb`.
+League notebooks cache Shown Space fetches under `data/cache/` so rerunning analysis cells is faster after the first download.
+
 ## Default Analysis
 
 The default filter is designed to match the earlier middle-aEC exploration:

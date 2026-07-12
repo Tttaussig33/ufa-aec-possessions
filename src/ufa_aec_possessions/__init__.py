@@ -3,8 +3,10 @@ from ufa_aec_possessions.fetching import (
     fetch_shownspace_game_data,
     fetch_shownspace_games,
     fetch_shownspace_season_throws,
+    fetch_shownspace_season_throws_cached,
     fetch_shownspace_throws_for_games,
 )
+from ufa_aec_possessions.leaderboards import summarize_team_aec_per_throw
 from ufa_aec_possessions.plotting import (
     plot_possession_path,
     plot_representative_paths,
@@ -37,7 +39,9 @@ __all__ = [
     "fetch_shownspace_game_data",
     "fetch_shownspace_games",
     "fetch_shownspace_season_throws",
+    "fetch_shownspace_season_throws_cached",
     "fetch_shownspace_throws_for_games",
+    "summarize_team_aec_per_throw",
     "compare_top_aec_metrics_by_team",
     "filter_analysis_possessions",
     "plot_possession_path",

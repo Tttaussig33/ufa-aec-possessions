@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+from pathlib import Path
 import time
 from typing import Iterable
 
@@ -91,4 +92,42 @@ def fetch_shownspace_season_throws(
         games = games.head(max_games).reset_index(drop=True)
 
     throws = fetch_shownspace_throws_for_games(games["GameID"].tolist(), delay=delay)
+    return games, throws
+
+
+def _cache_key(season: int, team_id: str | None, max_games: int | None, final_only: bool) -> str:
+    team_slug = str(team_id).lower() if team_id is not None else "all"
+    max_games_slug = str(max_games) if max_games is not None else "all"
+    final_slug = "final" if final_only else "all-statuses"
+    return f"shownspace_throws_{season}_{team_slug}_max-{max_games_slug}_{final_slug}"
+
+
+def fetch_shownspace_season_throws_cached(
+    season: int = 2026,
+    team_id: str | None = None,
+    max_games: int | None = None,
+    final_only: bool = True,
+    delay: float = 0.0,
+    cache_dir: str | Path = "data/cache/shownspace",
+    force_refresh: bool = False,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Fetch season throws with a local cache for faster notebook reruns."""
+    cache_path = Path(cache_dir)
+    cache_path.mkdir(parents=True, exist_ok=True)
+    key = _cache_key(season, team_id, max_games, final_only)
+    games_path = cache_path / f"{key}_games.pkl"
+    throws_path = cache_path / f"{key}_throws.pkl"
+
+    if not force_refresh and games_path.exists() and throws_path.exists():
+        return pd.read_pickle(games_path), pd.read_pickle(throws_path)
+
+    games, throws = fetch_shownspace_season_throws(
+        season=season,
+        team_id=team_id,
+        max_games=max_games,
+        final_only=final_only,
+        delay=delay,
+    )
+    games.to_pickle(games_path)
+    throws.to_pickle(throws_path)
     return games, throws
