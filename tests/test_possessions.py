@@ -12,6 +12,7 @@ from ufa_aec_possessions import (
     select_middle_aec_possessions,
     select_top_aec_possessions,
     select_top_aec_possessions_by_team,
+    select_top_aec_possessions_league,
 )
 
 
@@ -127,6 +128,39 @@ def test_top_selection_by_team_returns_ranked_rows_and_paths():
     assert breeze["possession_id"].tolist() == ["b3", "b1"]
     assert [path["possession_id"].iloc[0] for path in paths_by_team["glory"]] == ["g2", "g3"]
     assert [path["possession_id"].iloc[0] for path in paths_by_team["breeze"]] == ["b3", "b1"]
+
+
+def test_top_selection_league_returns_true_top_rows_and_paths():
+    possessions = pd.DataFrame(
+        {
+            "possession_id": ["g1", "g2", "e1", "e2", "b1", "b2"],
+            "team_id": ["glory", "glory", "empire", "empire", "breeze", "breeze"],
+            "outcome": ["goal"] * 6,
+            "line_type": ["o_line"] * 6,
+            "start_y": [30] * 6,
+            "field_progress": [70] * 6,
+            "huck_count": [0, 0, 0, 1, 0, 0],
+            "throw_count": [3] * 6,
+            "aec_per_throw": [0.20, 0.50, 0.60, 0.90, 0.40, 0.10],
+        }
+    )
+    paths = [
+        pd.DataFrame({"possession_id": [possession_id], "possession_throw": [1]})
+        for possession_id in possessions["possession_id"]
+    ]
+
+    top_league, top_paths = select_top_aec_possessions_league(
+        possessions,
+        paths,
+        n=3,
+        add_shape_features=False,
+    )
+
+    assert top_league["possession_id"].tolist() == ["e1", "g2", "b1"]
+    assert top_league["team_id"].tolist() == ["empire", "glory", "breeze"]
+    assert top_league["league_rank"].tolist() == [1, 2, 3]
+    assert top_league["selection_metric"].tolist() == ["aec_per_throw"] * 3
+    assert [path["possession_id"].iloc[0] for path in top_paths] == ["e1", "g2", "b1"]
 
 
 def test_compare_top_aec_metrics_by_team_reports_overlap():

@@ -22,6 +22,7 @@ from ufa_aec_possessions.selection import (
     compare_top_aec_metrics_by_team,
     filter_analysis_possessions,
     select_top_aec_possessions_by_team,
+    select_top_aec_possessions_league,
     select_middle_aec_possessions,
     select_top_aec_possessions,
 )
@@ -46,4 +47,5 @@ __all__ = [
     "select_middle_aec_possessions",
     "select_top_aec_possessions",
     "select_top_aec_possessions_by_team",
+    "select_top_aec_possessions_league",
 ]

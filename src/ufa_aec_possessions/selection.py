@@ -156,6 +156,41 @@ def select_top_aec_possessions_by_team(
     return league_top.sort_values(sort_columns).reset_index(drop=True), paths_by_team
 
 
+def select_top_aec_possessions_league(
+    possessions: pd.DataFrame,
+    paths: list[pd.DataFrame],
+    *,
+    metric: str = DEFAULT_METRIC,
+    n: int = 5,
+    add_shape_features: bool = True,
+    **filter_kwargs,
+) -> tuple[pd.DataFrame, list[pd.DataFrame]]:
+    """Select the top ranked possessions across the entire league-wide pool."""
+    filtered, filtered_paths = filter_analysis_possessions(
+        possessions,
+        paths,
+        team_id=None,
+        **filter_kwargs,
+    )
+    if filtered.empty:
+        return filtered, []
+
+    if add_shape_features:
+        filtered = add_possession_shape_features(filtered, filtered_paths)
+
+    selected, selected_paths = select_top_aec_possessions(
+        filtered,
+        filtered_paths,
+        metric=metric,
+        n=n,
+    )
+    selected = selected.copy()
+    selected["league_rank"] = range(1, len(selected) + 1)
+    selected["selection_metric"] = metric
+    selected["selection_value"] = pd.to_numeric(selected[metric], errors="coerce")
+    return selected, selected_paths
+
+
 def compare_top_aec_metrics_by_team(
     possessions: pd.DataFrame,
     paths: list[pd.DataFrame],
