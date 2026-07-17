@@ -17,6 +17,10 @@ from ufa_aec_possessions.plotting import (
     plot_side_by_side_paths,
     render_shownspace_possession_svg,
 )
+from ufa_aec_possessions.players import (
+    add_lag_contribution,
+    summarize_lag_contribution_per_touch,
+)
 from ufa_aec_possessions.possessions import (
     add_possession_shape_features,
     build_possessions,
@@ -35,6 +39,7 @@ from ufa_aec_possessions.selection import (
 
 __all__ = [
     "add_possession_shape_features",
+    "add_lag_contribution",
     "build_aec_possession_sets",
     "build_possessions",
     "build_scoring_possessions",
@@ -58,4 +63,5 @@ __all__ = [
     "select_top_aec_possessions",
     "select_top_aec_possessions_by_team",
     "select_top_aec_possessions_league",
+    "summarize_lag_contribution_per_touch",
 ]
