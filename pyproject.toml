@@ -9,6 +9,7 @@ description = "Analyze high-aEC UFA possessions and connect possession stats to 
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "ipykernel",
     "ipywidgets",
     "numpy",
     "pandas",
