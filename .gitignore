@@ -1,5 +1,7 @@
 ﻿.venv/
 __pycache__/
+.venv313/
+.uv-cache/
 *.py[cod]
 .ipynb_checkpoints/
 .pytest_cache/
