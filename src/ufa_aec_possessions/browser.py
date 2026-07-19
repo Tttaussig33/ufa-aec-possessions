@@ -20,6 +20,64 @@ def _label_metric_paths(
     return labeled
 
 
+def _metric_average(possessions: pd.DataFrame, metric: str) -> float:
+    if possessions.empty or metric not in possessions:
+        return float("nan")
+    return pd.to_numeric(possessions[metric], errors="coerce").mean()
+
+
+def _format_metric_average(value: float, metric: str) -> str:
+    label = "aEC/T" if metric == "aec_per_throw" else metric.replace("_", " ")
+    if pd.isna(value):
+        return f"Top 5 average {label}: -"
+    return f"Top 5 average {label}: {value:.3f}"
+
+
+def _team_top_average_summary(
+    team_ids: list[str],
+    left_possessions: pd.DataFrame,
+    right_possessions: pd.DataFrame,
+    left_metric: str,
+    right_metric: str,
+) -> pd.DataFrame:
+    rows = []
+    left_team_ids = left_possessions.get("team_id", pd.Series(dtype=str)).astype(str)
+    right_team_ids = right_possessions.get("team_id", pd.Series(dtype=str)).astype(str)
+
+    for team_id in team_ids:
+        left_team_possessions = left_possessions[left_team_ids.eq(team_id)]
+        right_team_possessions = right_possessions[right_team_ids.eq(team_id)]
+        rows.append(
+            {
+                "team_id": team_id,
+                "left_top5_average": _metric_average(left_team_possessions, left_metric),
+                "right_top5_average": _metric_average(right_team_possessions, right_metric),
+            }
+        )
+
+    summary = pd.DataFrame(rows)
+    if summary.empty:
+        return summary
+
+    summary["left_average_rank"] = summary["left_top5_average"].rank(
+        ascending=False,
+        method="min",
+        na_option="bottom",
+    )
+    summary["right_average_rank"] = summary["right_top5_average"].rank(
+        ascending=False,
+        method="min",
+        na_option="bottom",
+    )
+    summary["combined_average_rank"] = summary[["left_average_rank", "right_average_rank"]].mean(axis=1)
+    summary = summary.sort_values(
+        ["combined_average_rank", "left_top5_average", "right_top5_average", "team_id"],
+        ascending=[True, False, False, True],
+    ).reset_index(drop=True)
+    summary["browser_rank"] = range(1, len(summary) + 1)
+    return summary
+
+
 def create_team_aec_comparison_browser(
     metric_comparison: dict,
     *,
@@ -41,15 +99,25 @@ def create_team_aec_comparison_browser(
     left_possessions, left_paths_by_team = by_metric[left_metric]
     right_possessions, right_paths_by_team = by_metric[right_metric]
 
-    team_ids = sorted(
+    all_team_ids = sorted(
         set(left_possessions["team_id"].dropna().astype(str))
         | set(right_possessions["team_id"].dropna().astype(str))
     )
-    if not team_ids:
+    if not all_team_ids:
         return widgets.HTML("<b>No qualifying team possessions are available.</b>")
 
+    team_summary = _team_top_average_summary(
+        all_team_ids,
+        left_possessions,
+        right_possessions,
+        left_metric,
+        right_metric,
+    )
+    team_ids = team_summary["team_id"].tolist()
+    team_rank_lookup = team_summary.set_index("team_id")["browser_rank"].to_dict()
+
     team_dropdown = widgets.Dropdown(
-        options=[(team_id.title(), team_id) for team_id in team_ids],
+        options=[(f"{team_rank_lookup[team_id]}. {team_id.title()}", team_id) for team_id in team_ids],
         value=team_ids[0],
         description="Team",
         layout=widgets.Layout(width="320px"),
@@ -87,12 +155,15 @@ def create_team_aec_comparison_browser(
             right_metric,
             "Tot",
         )
+        summary_row = team_summary[team_summary["team_id"].eq(team_id)].iloc[0]
         fig = plot_side_by_side_paths(
             left_labeled_paths,
             right_labeled_paths,
             left_title=left_title,
             right_title=right_title,
             title=f"{team_id.title()} top non-huck long-field scoring possessions",
+            left_summary=_format_metric_average(summary_row["left_top5_average"], left_metric),
+            right_summary=_format_metric_average(summary_row["right_top5_average"], right_metric),
         )
         with output:
             output.clear_output(wait=True)
@@ -100,7 +171,8 @@ def create_team_aec_comparison_browser(
 
     def update(team_id: str):
         index = team_ids.index(team_id)
-        count_label.value = f"<b>{index + 1}</b> of <b>{len(team_ids)}</b>"
+        rank = team_rank_lookup[team_id]
+        count_label.value = f"<b>{rank}</b> of <b>{len(team_ids)}</b>"
         render_team(team_id)
 
     def on_team_change(change):

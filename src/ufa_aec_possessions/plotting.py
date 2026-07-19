@@ -27,7 +27,7 @@ def _format_percent(value) -> str:
     return f"{float(value):.1%}"
 
 
-def _metric_footer_text(title: str, labels, colors: list[str]) -> str:
+def _metric_footer_text(title: str, labels, colors: list[str], summary: str | None = None) -> str:
     items = []
     for index, label in enumerate(labels):
         label_text = str(label)
@@ -40,7 +40,10 @@ def _metric_footer_text(title: str, labels, colors: list[str]) -> str:
         color = colors[index % len(colors)]
         items.append(f'<span style="color:{color}">{text}</span>')
     value_text = " &nbsp;&nbsp; ".join(items) if items else "-"
-    return f"<b>{escape(title)}</b><br>{value_text}"
+    footer = f"<b>{escape(title)}</b><br>{value_text}"
+    if summary:
+        footer += f'<br><span style="color:#20385f">{escape(summary)}</span>'
+    return footer
 
 
 def _path_hover_text(path: pd.DataFrame) -> list[str]:
@@ -230,6 +233,8 @@ def plot_side_by_side_paths(
     right_title: str = "Total aEC",
     title: str = "Top scoring possessions",
     show_arrows: bool = False,
+    left_summary: str | None = None,
+    right_summary: str | None = None,
 ):
     """Plot two possession-path overlays side by side for metric comparison."""
     import plotly.graph_objects as go
@@ -295,9 +300,9 @@ def plot_side_by_side_paths(
         )
 
     fig.add_annotation(
-        text=_metric_footer_text(left_title, left_paths.keys(), colors),
+        text=_metric_footer_text(left_title, left_paths.keys(), colors, left_summary),
         x=0.25,
-        y=-0.07,
+        y=-0.08,
         xref="paper",
         yref="paper",
         showarrow=False,
@@ -306,9 +311,9 @@ def plot_side_by_side_paths(
         xanchor="center",
     )
     fig.add_annotation(
-        text=_metric_footer_text(right_title, right_paths.keys(), colors),
+        text=_metric_footer_text(right_title, right_paths.keys(), colors, right_summary),
         x=0.75,
-        y=-0.07,
+        y=-0.08,
         xref="paper",
         yref="paper",
         showarrow=False,
@@ -322,7 +327,7 @@ def plot_side_by_side_paths(
         height=760,
         plot_bgcolor="#f6faf5",
         paper_bgcolor="#ffffff",
-        margin={"l": 20, "r": 20, "t": 70, "b": 76},
+        margin={"l": 20, "r": 20, "t": 70, "b": 98},
         showlegend=False,
     )
     return fig
