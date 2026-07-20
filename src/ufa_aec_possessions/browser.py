@@ -78,6 +78,21 @@ def _team_top_average_summary(
     return summary
 
 
+def _ranked_team_options(team_summary: pd.DataFrame, value_column: str) -> list[tuple[str, str]]:
+    ranked = team_summary.sort_values(
+        [value_column, "team_id"],
+        ascending=[False, True],
+    ).reset_index(drop=True)
+    return [
+        (f"{rank}. {str(row['team_id']).title()}", str(row["team_id"]))
+        for rank, (_, row) in enumerate(ranked.iterrows(), start=1)
+    ]
+
+
+def _team_possessions(possessions: pd.DataFrame, team_id: str) -> pd.DataFrame:
+    return possessions[possessions["team_id"].astype(str).eq(team_id)]
+
+
 def create_team_aec_comparison_browser(
     metric_comparison: dict,
     *,
@@ -86,7 +101,7 @@ def create_team_aec_comparison_browser(
     left_title: str = "Top 5 by aEC per throw",
     right_title: str = "Top 5 by total aEC",
 ):
-    """Create a small notebook browser for flipping through team AEC comparisons."""
+    """Create a notebook browser for team AEC path comparisons."""
     try:
         import ipywidgets as widgets
         from IPython.display import display
@@ -115,85 +130,195 @@ def create_team_aec_comparison_browser(
     )
     team_ids = team_summary["team_id"].tolist()
     team_rank_lookup = team_summary.set_index("team_id")["browser_rank"].to_dict()
+    team_options = [(f"{team_rank_lookup[team_id]}. {team_id.title()}", team_id) for team_id in team_ids]
+    left_metric_team_options = _ranked_team_options(team_summary, "left_top5_average")
+    right_metric_team_options = _ranked_team_options(team_summary, "right_top5_average")
 
-    team_dropdown = widgets.Dropdown(
-        options=[(f"{team_rank_lookup[team_id]}. {team_id.title()}", team_id) for team_id in team_ids],
-        value=team_ids[0],
-        description="Team",
-        layout=widgets.Layout(width="320px"),
-        style={"description_width": "54px"},
-    )
-    previous_button = widgets.Button(
-        description="Previous",
-        icon="chevron-left",
-        layout=widgets.Layout(width="112px"),
-    )
-    next_button = widgets.Button(
-        description="Next",
-        icon="chevron-right",
-        layout=widgets.Layout(width="112px"),
-    )
-    count_label = widgets.HTML()
-    output = widgets.Output()
-
-    def render_team(team_id: str):
-        left_team_possessions = left_possessions[
-            left_possessions["team_id"].astype(str).eq(team_id)
-        ]
-        right_team_possessions = right_possessions[
-            right_possessions["team_id"].astype(str).eq(team_id)
-        ]
-        left_labeled_paths = _label_metric_paths(
-            left_team_possessions,
-            left_paths_by_team.get(team_id, []),
-            left_metric,
-            "aEC/T",
-        )
-        right_labeled_paths = _label_metric_paths(
-            right_team_possessions,
-            right_paths_by_team.get(team_id, []),
-            right_metric,
-            "Tot",
-        )
+    def metric_average_for_team(team_id: str, metric: str) -> float:
         summary_row = team_summary[team_summary["team_id"].eq(team_id)].iloc[0]
-        fig = plot_side_by_side_paths(
-            left_labeled_paths,
-            right_labeled_paths,
-            left_title=left_title,
-            right_title=right_title,
-            title=f"{team_id.title()} top non-huck long-field scoring possessions",
-            left_summary=_format_metric_average(summary_row["left_top5_average"], left_metric),
-            right_summary=_format_metric_average(summary_row["right_top5_average"], right_metric),
+        if metric == left_metric:
+            return summary_row["left_top5_average"]
+        if metric == right_metric:
+            return summary_row["right_top5_average"]
+        return _metric_average(_team_possessions(left_possessions, team_id), metric)
+
+    def make_metric_comparison_tab():
+        metric_team_ids = [team_id for _, team_id in left_metric_team_options]
+        metric_rank_lookup = {
+            team_id: rank for rank, (_, team_id) in enumerate(left_metric_team_options, start=1)
+        }
+        team_dropdown = widgets.Dropdown(
+            options=left_metric_team_options,
+            value=metric_team_ids[0],
+            description="Team",
+            layout=widgets.Layout(width="320px"),
+            style={"description_width": "54px"},
         )
-        with output:
-            output.clear_output(wait=True)
-            display(fig)
+        previous_button = widgets.Button(
+            description="Previous",
+            icon="chevron-left",
+            layout=widgets.Layout(width="112px"),
+        )
+        next_button = widgets.Button(
+            description="Next",
+            icon="chevron-right",
+            layout=widgets.Layout(width="112px"),
+        )
+        count_label = widgets.HTML()
+        output = widgets.Output()
 
-    def update(team_id: str):
-        index = team_ids.index(team_id)
-        rank = team_rank_lookup[team_id]
-        count_label.value = f"<b>{rank}</b> of <b>{len(team_ids)}</b>"
-        render_team(team_id)
+        def render_team(team_id: str):
+            left_team_possessions = _team_possessions(left_possessions, team_id)
+            right_team_possessions = _team_possessions(right_possessions, team_id)
+            left_labeled_paths = _label_metric_paths(
+                left_team_possessions,
+                left_paths_by_team.get(team_id, []),
+                left_metric,
+                "aEC/T",
+            )
+            right_labeled_paths = _label_metric_paths(
+                right_team_possessions,
+                right_paths_by_team.get(team_id, []),
+                right_metric,
+                "Tot",
+            )
+            fig = plot_side_by_side_paths(
+                left_labeled_paths,
+                right_labeled_paths,
+                left_title=left_title,
+                right_title=right_title,
+                title=f"{team_id.title()} top non-huck long-field scoring possessions",
+                left_summary=_format_metric_average(metric_average_for_team(team_id, left_metric), left_metric),
+                right_summary=_format_metric_average(metric_average_for_team(team_id, right_metric), right_metric),
+            )
+            with output:
+                output.clear_output(wait=True)
+                display(fig)
 
-    def on_team_change(change):
-        if change["name"] == "value" and change["new"] is not None:
-            update(change["new"])
+        def update(team_id: str):
+            rank = metric_rank_lookup[team_id]
+            count_label.value = f"<b>{rank}</b> of <b>{len(metric_team_ids)}</b>"
+            render_team(team_id)
 
-    def on_previous(_):
-        index = team_ids.index(team_dropdown.value)
-        team_dropdown.value = team_ids[max(0, index - 1)]
+        def on_team_change(change):
+            if change["name"] == "value" and change["new"] is not None:
+                update(change["new"])
 
-    def on_next(_):
-        index = team_ids.index(team_dropdown.value)
-        team_dropdown.value = team_ids[min(len(team_ids) - 1, index + 1)]
+        def on_previous(_):
+            index = metric_team_ids.index(team_dropdown.value)
+            team_dropdown.value = metric_team_ids[max(0, index - 1)]
 
-    team_dropdown.observe(on_team_change, names="value")
-    previous_button.on_click(on_previous)
-    next_button.on_click(on_next)
-    update(team_dropdown.value)
+        def on_next(_):
+            index = metric_team_ids.index(team_dropdown.value)
+            team_dropdown.value = metric_team_ids[min(len(metric_team_ids) - 1, index + 1)]
 
-    controls = widgets.HBox(
-        [team_dropdown, previous_button, next_button, count_label],
-        layout=widgets.Layout(align_items="center"),
+        team_dropdown.observe(on_team_change, names="value")
+        previous_button.on_click(on_previous)
+        next_button.on_click(on_next)
+        update(team_dropdown.value)
+
+        controls = widgets.HBox(
+            [team_dropdown, previous_button, next_button, count_label],
+            layout=widgets.Layout(align_items="center"),
+        )
+        return widgets.VBox([controls, output])
+
+    def make_team_comparison_tab(
+        *,
+        metric: str,
+        possessions: pd.DataFrame,
+        paths_by_team: dict[str, list[pd.DataFrame]],
+        metric_team_options: list[tuple[str, str]],
+        path_prefix: str,
+        panel_suffix: str,
+        title: str,
+    ):
+        left_team_dropdown = widgets.Dropdown(
+            options=metric_team_options,
+            value=metric_team_options[0][1],
+            description="Left",
+            layout=widgets.Layout(width="320px"),
+            style={"description_width": "54px"},
+        )
+        right_default = metric_team_options[1][1] if len(metric_team_options) > 1 else metric_team_options[0][1]
+        right_team_dropdown = widgets.Dropdown(
+            options=metric_team_options,
+            value=right_default,
+            description="Right",
+            layout=widgets.Layout(width="320px"),
+            style={"description_width": "54px"},
+        )
+        output = widgets.Output()
+        label_lookup = {team_id: label for label, team_id in metric_team_options}
+
+        def team_title(team_id: str) -> str:
+            return label_lookup[team_id]
+
+        def render_pair(left_team_id: str, right_team_id: str):
+            left_team_possessions = _team_possessions(possessions, left_team_id)
+            right_team_possessions = _team_possessions(possessions, right_team_id)
+            left_labeled_paths = _label_metric_paths(
+                left_team_possessions,
+                paths_by_team.get(left_team_id, []),
+                metric,
+                path_prefix,
+            )
+            right_labeled_paths = _label_metric_paths(
+                right_team_possessions,
+                paths_by_team.get(right_team_id, []),
+                metric,
+                path_prefix,
+            )
+            fig = plot_side_by_side_paths(
+                left_labeled_paths,
+                right_labeled_paths,
+                left_title=f"{team_title(left_team_id)} {panel_suffix}",
+                right_title=f"{team_title(right_team_id)} {panel_suffix}",
+                title=title,
+                left_summary=_format_metric_average(metric_average_for_team(left_team_id, metric), metric),
+                right_summary=_format_metric_average(metric_average_for_team(right_team_id, metric), metric),
+            )
+            with output:
+                output.clear_output(wait=True)
+                display(fig)
+
+        def update(_=None):
+            render_pair(left_team_dropdown.value, right_team_dropdown.value)
+
+        left_team_dropdown.observe(update, names="value")
+        right_team_dropdown.observe(update, names="value")
+        update()
+
+        controls = widgets.HBox(
+            [left_team_dropdown, right_team_dropdown],
+            layout=widgets.Layout(align_items="center"),
+        )
+        return widgets.VBox([controls, output])
+
+    tabs = widgets.Tab(
+        children=[
+            make_metric_comparison_tab(),
+            make_team_comparison_tab(
+                metric=left_metric,
+                possessions=left_possessions,
+                paths_by_team=left_paths_by_team,
+                metric_team_options=left_metric_team_options,
+                path_prefix="aEC/T",
+                panel_suffix="top 5 by aEC/T",
+                title="Team top non-huck long-field aEC/T comparison",
+            ),
+            make_team_comparison_tab(
+                metric=right_metric,
+                possessions=right_possessions,
+                paths_by_team=right_paths_by_team,
+                metric_team_options=right_metric_team_options,
+                path_prefix="Tot",
+                panel_suffix="top 5 by total aEC",
+                title="Team top non-huck long-field total aEC comparison",
+            ),
+        ]
     )
-    return widgets.VBox([controls, output])
+    tabs.set_title(0, "Team metrics")
+    tabs.set_title(1, "Compare aEC/T")
+    tabs.set_title(2, "Compare total aEC")
+    return tabs
