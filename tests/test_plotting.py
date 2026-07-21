@@ -5,6 +5,7 @@ import pandas as pd
 from ufa_aec_possessions.plotting import (
     plot_possession_path,
     plot_side_by_side_paths,
+    plot_team_throw_count_distribution,
     render_shownspace_possession_svg,
 )
 
@@ -64,3 +65,26 @@ def test_side_by_side_plotting_smoke():
     assert "total" not in right_footer
     assert left_footer.count("<br>") == 1
     assert right_footer.count("<br>") == 1
+
+
+def test_team_throw_count_distribution_uses_team_share():
+    possessions = pd.DataFrame(
+        {
+            "team_id": ["empire", "empire", "empire", "glory", "glory"],
+            "possession_id": ["e1", "e2", "e3", "g1", "g2"],
+            "throw_count": [5, 5, 8, 3, 7],
+            "line_type": ["o_line", "o_line", "o_line", "o_line", "d_line"],
+            "outcome": ["goal", "goal", "goal", "goal", "goal"],
+        }
+    )
+
+    fig = plot_team_throw_count_distribution(possessions)
+
+    assert len(fig.data) == 1
+    heatmap = fig.data[0]
+    assert list(heatmap.x) == [3, 4, 5, 6, 7, 8]
+    assert "Glory (mode 3)" in list(heatmap.y)
+    assert "Empire (mode 5)" in list(heatmap.y)
+    empire_index = list(heatmap.y).index("Empire (mode 5)")
+    throw_five_index = list(heatmap.x).index(5)
+    assert heatmap.z[empire_index][throw_five_index] == 2 / 3

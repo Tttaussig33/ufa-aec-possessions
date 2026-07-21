@@ -15,6 +15,7 @@ from ufa_aec_possessions.plotting import (
     plot_possession_path,
     plot_representative_paths,
     plot_side_by_side_paths,
+    plot_team_throw_count_distribution,
     render_shownspace_possession_svg,
 )
 from ufa_aec_possessions.players import (
@@ -58,6 +59,7 @@ __all__ = [
     "plot_possession_path",
     "plot_representative_paths",
     "plot_side_by_side_paths",
+    "plot_team_throw_count_distribution",
     "render_shownspace_possession_svg",
     "select_middle_aec_possessions",
     "select_top_aec_possessions",

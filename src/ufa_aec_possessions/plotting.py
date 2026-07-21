@@ -333,6 +333,159 @@ def plot_side_by_side_paths(
     return fig
 
 
+def plot_team_throw_count_distribution(
+    possessions: pd.DataFrame,
+    *,
+    title: str = "O-line scoring possession throw-count distribution",
+    outcomes: tuple[str, ...] | None = ("goal",),
+    line_type: str | None = "o_line",
+    normalize: bool = True,
+    min_throw_count: int | None = 1,
+    max_throw_count: int | None = None,
+):
+    """Plot each team's possession-length distribution by throw count."""
+    import plotly.graph_objects as go
+
+    required = {"team_id", "throw_count"}
+    missing = sorted(required - set(possessions.columns))
+    if missing:
+        raise ValueError(f"possessions is missing required columns: {missing}")
+
+    frame = possessions.copy()
+    frame["team_id"] = frame["team_id"].astype(str)
+    frame["throw_count"] = pd.to_numeric(frame["throw_count"], errors="coerce")
+    frame = frame.dropna(subset=["team_id", "throw_count"])
+    frame["throw_count"] = frame["throw_count"].astype(int)
+
+    if outcomes is not None and "outcome" in frame:
+        allowed = {str(outcome).lower() for outcome in outcomes}
+        frame = frame[frame["outcome"].astype(str).str.lower().isin(allowed)]
+    if line_type is not None and "line_type" in frame:
+        frame = frame[frame["line_type"].astype(str).str.lower().eq(line_type.lower())]
+    if min_throw_count is not None:
+        frame = frame[frame["throw_count"].ge(int(min_throw_count))]
+    if max_throw_count is not None:
+        frame = frame[frame["throw_count"].le(int(max_throw_count))]
+
+    if frame.empty:
+        return go.Figure().update_layout(title=title)
+
+    counts = (
+        frame.groupby(["team_id", "throw_count"], dropna=False)
+        .size()
+        .rename("possessions")
+        .reset_index()
+    )
+    totals = counts.groupby("team_id")["possessions"].sum().rename("team_possessions")
+    counts = counts.merge(totals, on="team_id", how="left")
+    counts["share"] = counts["possessions"] / counts["team_possessions"].replace(0, pd.NA)
+
+    mode_rows = (
+        counts.sort_values(["team_id", "possessions", "throw_count"], ascending=[True, False, True])
+        .drop_duplicates("team_id")
+        .rename(columns={"throw_count": "mode_throw_count", "possessions": "mode_possessions", "share": "mode_share"})
+    )
+    mode_lookup = mode_rows.set_index("team_id")[["mode_throw_count", "mode_possessions", "mode_share"]]
+    team_order = (
+        mode_rows.sort_values(["mode_throw_count", "mode_share", "team_id"], ascending=[True, False, True])[
+            "team_id"
+        ]
+        .tolist()
+    )
+
+    min_count = int(frame["throw_count"].min())
+    max_count = int(frame["throw_count"].max())
+    throw_counts = list(range(min_count, max_count + 1))
+    matrix = (
+        counts.pivot(index="team_id", columns="throw_count", values="share" if normalize else "possessions")
+        .reindex(index=team_order, columns=throw_counts)
+        .fillna(0.0)
+    )
+    count_matrix = (
+        counts.pivot(index="team_id", columns="throw_count", values="possessions")
+        .reindex(index=team_order, columns=throw_counts)
+        .fillna(0)
+        .astype(int)
+    )
+    total_matrix = pd.DataFrame(
+        {
+            throw_count: [
+                int(totals.get(team_id, 0))
+                for team_id in team_order
+            ]
+            for throw_count in throw_counts
+        },
+        index=team_order,
+    )
+
+    y_labels = [
+        f"{team_id.title()} (mode {int(mode_lookup.loc[team_id, 'mode_throw_count'])})"
+        for team_id in team_order
+    ]
+    customdata = []
+    for team_id in team_order:
+        team_rows = []
+        for throw_count in throw_counts:
+            share = float(matrix.loc[team_id, throw_count]) if normalize else counts[
+                counts["team_id"].eq(team_id) & counts["throw_count"].eq(throw_count)
+            ]["share"].sum()
+            team_rows.append(
+                [
+                    int(count_matrix.loc[team_id, throw_count]),
+                    float(share),
+                    int(total_matrix.loc[team_id, throw_count]),
+                    int(mode_lookup.loc[team_id, "mode_throw_count"]),
+                    int(mode_lookup.loc[team_id, "mode_possessions"]),
+                    float(mode_lookup.loc[team_id, "mode_share"]),
+                ]
+            )
+        customdata.append(team_rows)
+
+    z_title = "share of team possessions" if normalize else "possessions"
+    hovertemplate = (
+        "<b>%{y}</b><br>"
+        "Throws: %{x}<br>"
+        "Possessions: %{customdata[0]:,}<br>"
+        "Team share: %{customdata[1]:.1%}<br>"
+        "Team O-line scores: %{customdata[2]:,}<br>"
+        "Mode: %{customdata[3]} throws "
+        "(%{customdata[4]:,}, %{customdata[5]:.1%})"
+        "<extra></extra>"
+    )
+
+    fig = go.Figure(
+        data=[
+            go.Heatmap(
+                x=throw_counts,
+                y=y_labels,
+                z=matrix.to_numpy(dtype=float),
+                customdata=customdata,
+                colorscale=[
+                    [0.0, "#f5faf3"],
+                    [0.35, "#a9d99e"],
+                    [0.7, "#3f9b5f"],
+                    [1.0, "#09552f"],
+                ],
+                colorbar={"title": z_title},
+                hovertemplate=hovertemplate,
+            )
+        ]
+    )
+    fig.update_layout(
+        title={"text": title, "x": 0.5, "xanchor": "center"},
+        width=1180,
+        height=max(600, 28 * len(team_order) + 180),
+        margin={"l": 190, "r": 80, "t": 80, "b": 70},
+        plot_bgcolor="#f7fbf5",
+        paper_bgcolor="#ffffff",
+        font={"family": "Segoe UI, Arial, sans-serif", "color": "#20385f"},
+        hoverlabel={"bgcolor": "#ffffff", "font": {"color": "#14213d"}},
+        xaxis={"title": "Throws in possession", "dtick": 1, "side": "top"},
+        yaxis={"title": "Team", "autorange": "reversed"},
+    )
+    return fig
+
+
 def render_shownspace_possession_svg(path: pd.DataFrame, width: int = 260, height: int = 560) -> str:
     """Return a compact Shown Space-style SVG field for one possession."""
     path = path.sort_values("possession_throw").copy()
