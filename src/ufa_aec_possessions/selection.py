@@ -156,6 +156,51 @@ def select_top_aec_possessions_by_team(
     return league_top.sort_values(sort_columns).reset_index(drop=True), paths_by_team
 
 
+def select_middle_aec_possessions_by_team(
+    possessions: pd.DataFrame,
+    paths: list[pd.DataFrame],
+    *,
+    metric: str = DEFAULT_METRIC,
+    count: int = 5,
+    add_shape_features: bool = True,
+    **filter_kwargs,
+) -> tuple[pd.DataFrame, dict[str, list[pd.DataFrame]]]:
+    """Select each team's centered ranked window from one league-wide pool."""
+    filtered, filtered_paths = filter_analysis_possessions(
+        possessions,
+        paths,
+        team_id=None,
+        **filter_kwargs,
+    )
+    if filtered.empty:
+        return filtered, {}
+
+    if add_shape_features:
+        filtered = add_possession_shape_features(filtered, filtered_paths)
+
+    team_rows = []
+    paths_by_team: dict[str, list[pd.DataFrame]] = {}
+    for team_id, team_possessions in filtered.groupby("team_id", dropna=False):
+        team_label = str(team_id)
+        selected, selected_paths = select_middle_aec_possessions(
+            team_possessions,
+            filtered_paths,
+            metric=metric,
+            count=count,
+        )
+        selected = selected.copy()
+        selected["team_rank"] = range(1, len(selected) + 1)
+        team_rows.append(selected)
+        paths_by_team[team_label] = selected_paths
+
+    if not team_rows:
+        return pd.DataFrame(), {}
+
+    league_middle = pd.concat(team_rows, ignore_index=True)
+    sort_columns = ["team_id", "team_rank"]
+    return league_middle.sort_values(sort_columns).reset_index(drop=True), paths_by_team
+
+
 def select_top_aec_possessions_league(
     possessions: pd.DataFrame,
     paths: list[pd.DataFrame],
@@ -191,20 +236,21 @@ def select_top_aec_possessions_league(
     return selected, selected_paths
 
 
-def compare_top_aec_metrics_by_team(
+def _metric_comparison_sets(
     possessions: pd.DataFrame,
     paths: list[pd.DataFrame],
     *,
-    metrics: tuple[str, str] = ("aec_per_throw", "total_aec"),
-    n: int = 5,
-    add_shape_features: bool = True,
+    metrics: tuple[str, str],
+    n: int,
+    add_shape_features: bool,
     **filter_kwargs,
-) -> dict[str, object]:
-    """Compare each team's top possessions under two AEC ranking metrics."""
-    if len(metrics) != 2:
-        raise ValueError("compare_top_aec_metrics_by_team expects exactly two metrics")
-
+) -> tuple[
+    dict[str, tuple[pd.DataFrame, dict[str, list[pd.DataFrame]]]],
+    dict[str, tuple[pd.DataFrame, dict[str, list[pd.DataFrame]]]],
+    dict[str, dict[str, set[str]]],
+]:
     by_metric: dict[str, tuple[pd.DataFrame, dict[str, list[pd.DataFrame]]]] = {}
+    middle_by_metric: dict[str, tuple[pd.DataFrame, dict[str, list[pd.DataFrame]]]] = {}
     id_sets_by_metric: dict[str, dict[str, set[str]]] = {}
     for metric in metrics:
         top_possessions, paths_by_team = select_top_aec_possessions_by_team(
@@ -223,10 +269,62 @@ def compare_top_aec_metrics_by_team(
                 errors="coerce",
             )
         by_metric[metric] = (top_possessions, paths_by_team)
+
+        middle_possessions, middle_paths_by_team = select_middle_aec_possessions_by_team(
+            possessions,
+            paths,
+            metric=metric,
+            count=n,
+            add_shape_features=add_shape_features,
+            **filter_kwargs,
+        )
+        middle_possessions = middle_possessions.copy()
+        middle_possessions["selection_metric"] = metric
+        if not middle_possessions.empty:
+            middle_possessions["selection_value"] = pd.to_numeric(
+                middle_possessions[metric],
+                errors="coerce",
+            )
+        middle_by_metric[metric] = (middle_possessions, middle_paths_by_team)
+
         id_sets_by_metric[metric] = {
             str(team_id): set(group["possession_id"].astype(str))
             for team_id, group in top_possessions.groupby("team_id", dropna=False)
         }
+
+    return by_metric, middle_by_metric, id_sets_by_metric
+
+
+def compare_top_aec_metrics_by_team(
+    possessions: pd.DataFrame,
+    paths: list[pd.DataFrame],
+    *,
+    metrics: tuple[str, str] = ("aec_per_throw", "total_aec"),
+    n: int = 5,
+    add_shape_features: bool = True,
+    **filter_kwargs,
+) -> dict[str, object]:
+    """Compare each team's top possessions under two AEC ranking metrics."""
+    if len(metrics) != 2:
+        raise ValueError("compare_top_aec_metrics_by_team expects exactly two metrics")
+
+    by_metric, middle_by_metric, id_sets_by_metric = _metric_comparison_sets(
+        possessions,
+        paths,
+        metrics=metrics,
+        n=n,
+        add_shape_features=add_shape_features,
+        **filter_kwargs,
+    )
+    include_hucks_filter_kwargs = {**filter_kwargs, "exclude_hucks": False}
+    include_hucks_by_metric, include_hucks_middle_by_metric, _ = _metric_comparison_sets(
+        possessions,
+        paths,
+        metrics=metrics,
+        n=n,
+        add_shape_features=add_shape_features,
+        **include_hucks_filter_kwargs,
+    )
 
     first_metric, second_metric = metrics
     team_ids = sorted(
@@ -253,6 +351,9 @@ def compare_top_aec_metrics_by_team(
 
     return {
         "by_metric": by_metric,
+        "middle_by_metric": middle_by_metric,
+        "include_hucks_by_metric": include_hucks_by_metric,
+        "include_hucks_middle_by_metric": include_hucks_middle_by_metric,
         "overlap": pd.DataFrame(overlap_rows),
     }
 

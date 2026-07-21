@@ -26,11 +26,11 @@ def _metric_average(possessions: pd.DataFrame, metric: str) -> float:
     return pd.to_numeric(possessions[metric], errors="coerce").mean()
 
 
-def _format_metric_average(value: float, metric: str) -> str:
+def _format_metric_average(value: float, metric: str, window_label: str = "Top 5") -> str:
     label = "aEC/T" if metric == "aec_per_throw" else metric.replace("_", " ")
     if pd.isna(value):
-        return f"Top 5 average {label}: -"
-    return f"Top 5 average {label}: {value:.3f}"
+        return f"{window_label} average {label}: -"
+    return f"{window_label} average {label}: {value:.3f}"
 
 
 def _team_top_average_summary(
@@ -111,44 +111,117 @@ def create_team_aec_comparison_browser(
         ) from exc
 
     by_metric = metric_comparison["by_metric"]
-    left_possessions, left_paths_by_team = by_metric[left_metric]
-    right_possessions, right_paths_by_team = by_metric[right_metric]
+    middle_by_metric = metric_comparison.get("middle_by_metric", {})
+    include_hucks_by_metric = metric_comparison.get("include_hucks_by_metric", {})
+    include_hucks_middle_by_metric = metric_comparison.get("include_hucks_middle_by_metric", {})
 
-    all_team_ids = sorted(
-        set(left_possessions["team_id"].dropna().astype(str))
-        | set(right_possessions["team_id"].dropna().astype(str))
-    )
-    if not all_team_ids:
+    def build_view(
+        top_by_metric: dict[str, tuple[pd.DataFrame, dict[str, list[pd.DataFrame]]]],
+        middle_sets_by_metric: dict[str, tuple[pd.DataFrame, dict[str, list[pd.DataFrame]]]],
+        *,
+        title_filter_label: str,
+    ) -> dict[str, object]:
+        left_possessions, left_paths_by_team = top_by_metric[left_metric]
+        right_possessions, right_paths_by_team = top_by_metric[right_metric]
+        left_middle_possessions, left_middle_paths_by_team = middle_sets_by_metric.get(
+            left_metric,
+            (pd.DataFrame(), {}),
+        )
+        right_middle_possessions, right_middle_paths_by_team = middle_sets_by_metric.get(
+            right_metric,
+            (pd.DataFrame(), {}),
+        )
+        all_team_ids = sorted(
+            set(left_possessions["team_id"].dropna().astype(str))
+            | set(right_possessions["team_id"].dropna().astype(str))
+        )
+        team_summary = _team_top_average_summary(
+            all_team_ids,
+            left_possessions,
+            right_possessions,
+            left_metric,
+            right_metric,
+        )
+        if team_summary.empty:
+            left_metric_team_options: list[tuple[str, str]] = []
+            right_metric_team_options: list[tuple[str, str]] = []
+        else:
+            left_metric_team_options = _ranked_team_options(team_summary, "left_top5_average")
+            right_metric_team_options = _ranked_team_options(team_summary, "right_top5_average")
+        return {
+            "entries": {
+                left_metric: {
+                    "top_possessions": left_possessions,
+                    "top_paths_by_team": left_paths_by_team,
+                    "middle_possessions": left_middle_possessions,
+                    "middle_paths_by_team": left_middle_paths_by_team,
+                    "team_options": left_metric_team_options,
+                },
+                right_metric: {
+                    "top_possessions": right_possessions,
+                    "top_paths_by_team": right_paths_by_team,
+                    "middle_possessions": right_middle_possessions,
+                    "middle_paths_by_team": right_middle_paths_by_team,
+                    "team_options": right_metric_team_options,
+                },
+            },
+            "team_summary": team_summary,
+            "title_filter_label": title_filter_label,
+        }
+
+    views = {
+        "exclude": build_view(
+            by_metric,
+            middle_by_metric,
+            title_filter_label="non-huck",
+        )
+    }
+    if include_hucks_by_metric:
+        views["include"] = build_view(
+            include_hucks_by_metric,
+            include_hucks_middle_by_metric,
+            title_filter_label="including hucks",
+        )
+    has_huck_toggle = "include" in views
+
+    first_view = views["exclude"]
+    first_options = first_view["entries"][left_metric]["team_options"]
+    if not first_options:
         return widgets.HTML("<b>No qualifying team possessions are available.</b>")
 
-    team_summary = _team_top_average_summary(
-        all_team_ids,
-        left_possessions,
-        right_possessions,
-        left_metric,
-        right_metric,
-    )
-    team_ids = team_summary["team_id"].tolist()
-    team_rank_lookup = team_summary.set_index("team_id")["browser_rank"].to_dict()
-    team_options = [(f"{team_rank_lookup[team_id]}. {team_id.title()}", team_id) for team_id in team_ids]
-    left_metric_team_options = _ranked_team_options(team_summary, "left_top5_average")
-    right_metric_team_options = _ranked_team_options(team_summary, "right_top5_average")
+    def make_huck_toggle():
+        return widgets.ToggleButtons(
+            options=[("No hucks", "exclude"), ("Include hucks", "include")],
+            value="exclude",
+            description="Hucks",
+            layout=widgets.Layout(width="280px"),
+            style={"description_width": "54px"},
+        )
 
-    def metric_average_for_team(team_id: str, metric: str) -> float:
-        summary_row = team_summary[team_summary["team_id"].eq(team_id)].iloc[0]
-        if metric == left_metric:
-            return summary_row["left_top5_average"]
-        if metric == right_metric:
-            return summary_row["right_top5_average"]
-        return _metric_average(_team_possessions(left_possessions, team_id), metric)
+    def active_huck_key(huck_toggle) -> str:
+        return huck_toggle.value if has_huck_toggle else "exclude"
+
+    def metric_options(view_key: str, metric: str) -> list[tuple[str, str]]:
+        return views[view_key]["entries"][metric]["team_options"]
+
+    def title_for(team_id: str, window_label: str, view_key: str) -> str:
+        filter_label = views[view_key]["title_filter_label"]
+        if filter_label == "non-huck":
+            return f"{team_id.title()} {window_label.lower()} non-huck long-field scoring possessions"
+        return f"{team_id.title()} {window_label.lower()} long-field scoring possessions including hucks"
+
+    def comparison_title(window_label: str, view_key: str, metric_label: str) -> str:
+        filter_label = views[view_key]["title_filter_label"]
+        if filter_label == "non-huck":
+            return f"Team {window_label.lower()} non-huck long-field {metric_label} comparison"
+        return f"Team {window_label.lower()} long-field {metric_label} comparison including hucks"
 
     def make_metric_comparison_tab():
-        metric_team_ids = [team_id for _, team_id in left_metric_team_options]
-        metric_rank_lookup = {
-            team_id: rank for rank, (_, team_id) in enumerate(left_metric_team_options, start=1)
-        }
+        huck_toggle = make_huck_toggle()
+        initial_options = metric_options("exclude", left_metric)
+        metric_team_ids = [team_id for _, team_id in initial_options]
         team_dropdown = widgets.Dropdown(
-            options=left_metric_team_options,
+            options=initial_options,
             value=metric_team_ids[0],
             description="Team",
             layout=widgets.Layout(width="320px"),
@@ -167,18 +240,21 @@ def create_team_aec_comparison_browser(
         count_label = widgets.HTML()
         output = widgets.Output()
 
-        def render_team(team_id: str):
-            left_team_possessions = _team_possessions(left_possessions, team_id)
-            right_team_possessions = _team_possessions(right_possessions, team_id)
+        def render_team(team_id: str, view_key: str):
+            view = views[view_key]
+            left_entry = view["entries"][left_metric]
+            right_entry = view["entries"][right_metric]
+            left_team_possessions = _team_possessions(left_entry["top_possessions"], team_id)
+            right_team_possessions = _team_possessions(right_entry["top_possessions"], team_id)
             left_labeled_paths = _label_metric_paths(
                 left_team_possessions,
-                left_paths_by_team.get(team_id, []),
+                left_entry["top_paths_by_team"].get(team_id, []),
                 left_metric,
                 "aEC/T",
             )
             right_labeled_paths = _label_metric_paths(
                 right_team_possessions,
-                right_paths_by_team.get(team_id, []),
+                right_entry["top_paths_by_team"].get(team_id, []),
                 right_metric,
                 "Tot",
             )
@@ -187,38 +263,71 @@ def create_team_aec_comparison_browser(
                 right_labeled_paths,
                 left_title=left_title,
                 right_title=right_title,
-                title=f"{team_id.title()} top non-huck long-field scoring possessions",
-                left_summary=_format_metric_average(metric_average_for_team(team_id, left_metric), left_metric),
-                right_summary=_format_metric_average(metric_average_for_team(team_id, right_metric), right_metric),
+                title=title_for(team_id, "Top 5", view_key),
+                left_summary=_format_metric_average(
+                    _metric_average(left_team_possessions, left_metric),
+                    left_metric,
+                ),
+                right_summary=_format_metric_average(
+                    _metric_average(right_team_possessions, right_metric),
+                    right_metric,
+                ),
             )
             with output:
                 output.clear_output(wait=True)
                 display(fig)
 
-        def update(team_id: str):
+        def update(team_id: str | None = None):
+            view_key = active_huck_key(huck_toggle)
+            active_options = metric_options(view_key, left_metric)
+            metric_team_ids = [team_id for _, team_id in active_options]
+            metric_rank_lookup = {
+                team_id: rank for rank, (_, team_id) in enumerate(active_options, start=1)
+            }
+            if team_id is None:
+                team_id = team_dropdown.value
+            if team_id not in metric_team_ids:
+                team_id = metric_team_ids[0]
+                team_dropdown.value = team_id
             rank = metric_rank_lookup[team_id]
             count_label.value = f"<b>{rank}</b> of <b>{len(metric_team_ids)}</b>"
-            render_team(team_id)
+            render_team(team_id, view_key)
+
+        def sync_huck_options(_=None):
+            view_key = active_huck_key(huck_toggle)
+            active_options = metric_options(view_key, left_metric)
+            active_ids = [team_id for _, team_id in active_options]
+            current_team_id = team_dropdown.value
+            team_dropdown.options = active_options
+            team_dropdown.value = current_team_id if current_team_id in active_ids else active_ids[0]
+            update(team_dropdown.value)
 
         def on_team_change(change):
             if change["name"] == "value" and change["new"] is not None:
                 update(change["new"])
 
         def on_previous(_):
+            metric_team_ids = [team_id for _, team_id in metric_options(active_huck_key(huck_toggle), left_metric)]
             index = metric_team_ids.index(team_dropdown.value)
             team_dropdown.value = metric_team_ids[max(0, index - 1)]
 
         def on_next(_):
+            metric_team_ids = [team_id for _, team_id in metric_options(active_huck_key(huck_toggle), left_metric)]
             index = metric_team_ids.index(team_dropdown.value)
             team_dropdown.value = metric_team_ids[min(len(metric_team_ids) - 1, index + 1)]
 
         team_dropdown.observe(on_team_change, names="value")
+        if has_huck_toggle:
+            huck_toggle.observe(sync_huck_options, names="value")
         previous_button.on_click(on_previous)
         next_button.on_click(on_next)
         update(team_dropdown.value)
 
+        control_children = [team_dropdown, previous_button, next_button, count_label]
+        if has_huck_toggle:
+            control_children.append(huck_toggle)
         controls = widgets.HBox(
-            [team_dropdown, previous_button, next_button, count_label],
+            control_children,
             layout=widgets.Layout(align_items="center"),
         )
         return widgets.VBox([controls, output])
@@ -226,57 +335,88 @@ def create_team_aec_comparison_browser(
     def make_team_comparison_tab(
         *,
         metric: str,
-        possessions: pd.DataFrame,
-        paths_by_team: dict[str, list[pd.DataFrame]],
-        metric_team_options: list[tuple[str, str]],
         path_prefix: str,
         panel_suffix: str,
-        title: str,
+        metric_label: str,
+        allow_middle: bool = False,
     ):
+        huck_toggle = make_huck_toggle()
+        initial_options = metric_options("exclude", metric)
         left_team_dropdown = widgets.Dropdown(
-            options=metric_team_options,
-            value=metric_team_options[0][1],
+            options=initial_options,
+            value=initial_options[0][1],
             description="Left",
             layout=widgets.Layout(width="320px"),
             style={"description_width": "54px"},
         )
-        right_default = metric_team_options[1][1] if len(metric_team_options) > 1 else metric_team_options[0][1]
+        right_default = initial_options[1][1] if len(initial_options) > 1 else initial_options[0][1]
         right_team_dropdown = widgets.Dropdown(
-            options=metric_team_options,
+            options=initial_options,
             value=right_default,
             description="Right",
             layout=widgets.Layout(width="320px"),
             style={"description_width": "54px"},
         )
         output = widgets.Output()
-        label_lookup = {team_id: label for label, team_id in metric_team_options}
+        set_toggle = widgets.ToggleButtons(
+            options=[("Top 5", "top"), ("Middle 5", "middle")],
+            value="top",
+            description="Set",
+            layout=widgets.Layout(width="220px"),
+            style={"description_width": "42px"},
+        )
 
         def team_title(team_id: str) -> str:
+            label_lookup = {team_id: label for label, team_id in metric_options(active_huck_key(huck_toggle), metric)}
             return label_lookup[team_id]
 
+        def has_middle_selection(view_key: str) -> bool:
+            middle_possessions = views[view_key]["entries"][metric]["middle_possessions"]
+            return allow_middle and not middle_possessions.empty
+
+        def active_selection() -> tuple[pd.DataFrame, dict[str, list[pd.DataFrame]], str, str]:
+            view_key = active_huck_key(huck_toggle)
+            entry = views[view_key]["entries"][metric]
+            if has_middle_selection(view_key) and set_toggle.value == "middle":
+                return entry["middle_possessions"], entry["middle_paths_by_team"], "Middle 5", view_key
+            return entry["top_possessions"], entry["top_paths_by_team"], "Top 5", view_key
+
         def render_pair(left_team_id: str, right_team_id: str):
-            left_team_possessions = _team_possessions(possessions, left_team_id)
-            right_team_possessions = _team_possessions(possessions, right_team_id)
+            active_possessions, active_paths_by_team, window_label, view_key = active_selection()
+            left_team_possessions = _team_possessions(active_possessions, left_team_id)
+            right_team_possessions = _team_possessions(active_possessions, right_team_id)
             left_labeled_paths = _label_metric_paths(
                 left_team_possessions,
-                paths_by_team.get(left_team_id, []),
+                active_paths_by_team.get(left_team_id, []),
                 metric,
                 path_prefix,
             )
             right_labeled_paths = _label_metric_paths(
                 right_team_possessions,
-                paths_by_team.get(right_team_id, []),
+                active_paths_by_team.get(right_team_id, []),
                 metric,
                 path_prefix,
+            )
+            active_panel_suffix = panel_suffix.replace("Top 5", window_label).replace(
+                "top 5",
+                window_label.lower(),
             )
             fig = plot_side_by_side_paths(
                 left_labeled_paths,
                 right_labeled_paths,
-                left_title=f"{team_title(left_team_id)} {panel_suffix}",
-                right_title=f"{team_title(right_team_id)} {panel_suffix}",
-                title=title,
-                left_summary=_format_metric_average(metric_average_for_team(left_team_id, metric), metric),
-                right_summary=_format_metric_average(metric_average_for_team(right_team_id, metric), metric),
+                left_title=f"{team_title(left_team_id)} {active_panel_suffix}",
+                right_title=f"{team_title(right_team_id)} {active_panel_suffix}",
+                title=comparison_title(window_label, view_key, metric_label),
+                left_summary=_format_metric_average(
+                    _metric_average(left_team_possessions, metric),
+                    metric,
+                    window_label,
+                ),
+                right_summary=_format_metric_average(
+                    _metric_average(right_team_possessions, metric),
+                    metric,
+                    window_label,
+                ),
             )
             with output:
                 output.clear_output(wait=True)
@@ -285,12 +425,36 @@ def create_team_aec_comparison_browser(
         def update(_=None):
             render_pair(left_team_dropdown.value, right_team_dropdown.value)
 
+        def sync_options(_=None):
+            view_key = active_huck_key(huck_toggle)
+            active_options = metric_options(view_key, metric)
+            active_ids = [team_id for _, team_id in active_options]
+            current_left = left_team_dropdown.value
+            current_right = right_team_dropdown.value
+            left_team_dropdown.options = active_options
+            right_team_dropdown.options = active_options
+            left_team_dropdown.value = current_left if current_left in active_ids else active_ids[0]
+            if current_right in active_ids:
+                right_team_dropdown.value = current_right
+            else:
+                right_team_dropdown.value = active_ids[1] if len(active_ids) > 1 else active_ids[0]
+            update()
+
         left_team_dropdown.observe(update, names="value")
         right_team_dropdown.observe(update, names="value")
+        if allow_middle:
+            set_toggle.observe(update, names="value")
+        if has_huck_toggle:
+            huck_toggle.observe(sync_options, names="value")
         update()
 
+        control_children = [left_team_dropdown, right_team_dropdown]
+        if allow_middle:
+            control_children.append(set_toggle)
+        if has_huck_toggle:
+            control_children.append(huck_toggle)
         controls = widgets.HBox(
-            [left_team_dropdown, right_team_dropdown],
+            control_children,
             layout=widgets.Layout(align_items="center"),
         )
         return widgets.VBox([controls, output])
@@ -300,21 +464,16 @@ def create_team_aec_comparison_browser(
             make_metric_comparison_tab(),
             make_team_comparison_tab(
                 metric=left_metric,
-                possessions=left_possessions,
-                paths_by_team=left_paths_by_team,
-                metric_team_options=left_metric_team_options,
                 path_prefix="aEC/T",
                 panel_suffix="top 5 by aEC/T",
-                title="Team top non-huck long-field aEC/T comparison",
+                metric_label="aEC/T",
+                allow_middle=True,
             ),
             make_team_comparison_tab(
                 metric=right_metric,
-                possessions=right_possessions,
-                paths_by_team=right_paths_by_team,
-                metric_team_options=right_metric_team_options,
                 path_prefix="Tot",
                 panel_suffix="top 5 by total aEC",
-                title="Team top non-huck long-field total aEC comparison",
+                metric_label="total aEC",
             ),
         ]
     )
