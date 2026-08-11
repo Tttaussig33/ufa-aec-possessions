@@ -36,6 +36,18 @@ Or open `notebooks/01_team_aec_possession_shapes.ipynb` and run the cells intera
 For team-level aEC/T rankings, open `notebooks/02_team_aec_t_leaderboard.ipynb`.
 League notebooks cache Shown Space fetches under `data/cache/` so rerunning analysis cells is faster after the first download.
 
+## Refreshing Data
+
+The cached loader uses completed regular-season games only by default. In the notebook setup cell, set `FORCE_REFRESH = True` before rerunning the data-loading cell to fetch the latest Shown Space schedule and throws instead of reusing the local pickle files:
+
+```python
+FORCE_REFRESH = True
+```
+
+To include postseason games intentionally, pass `regular_season_only=False` to
+`fetch_shownspace_season_throws()` or
+`fetch_shownspace_season_throws_cached()`.
+
 ## Default Analysis
 
 The default filter is designed to match the earlier middle-aEC exploration:
