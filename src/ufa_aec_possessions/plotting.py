@@ -418,10 +418,15 @@ def plot_team_throw_count_distribution(
         index=team_order,
     )
 
-    y_labels = [
-        f"{team_id.title()} (mode {int(mode_lookup.loc[team_id, 'mode_throw_count'])})"
-        for team_id in team_order
-    ]
+    y_labels = []
+    for team_id in team_order:
+        total_possessions = int(totals.get(team_id, 0))
+        possession_label = "possession" if total_possessions == 1 else "possessions"
+        y_labels.append(
+            f"{team_id.title()} (mode "
+            f"{int(mode_lookup.loc[team_id, 'mode_throw_count'])}, "
+            f"{total_possessions:,} {possession_label})"
+        )
     customdata = []
     for team_id in team_order:
         team_rows = []
@@ -475,7 +480,7 @@ def plot_team_throw_count_distribution(
         title={"text": title, "x": 0.5, "xanchor": "center"},
         width=1180,
         height=max(600, 28 * len(team_order) + 180),
-        margin={"l": 190, "r": 80, "t": 80, "b": 70},
+        margin={"l": 245, "r": 80, "t": 80, "b": 70},
         plot_bgcolor="#f7fbf5",
         paper_bgcolor="#ffffff",
         font={"family": "Segoe UI, Arial, sans-serif", "color": "#20385f"},
