@@ -79,6 +79,32 @@ def test_build_possessions_computes_metrics_and_default_filter():
     assert [path["possession_id"].iloc[0] for path in filtered_paths] == [first["possession_id"]]
 
 
+def test_build_possessions_recognizes_both_end_zone_boundaries():
+    throws = synthetic_throws().copy()
+    throws.loc[throws["possession_num"].eq(1), "ReceiverY"] = 100
+    throws.loc[throws["possession_num"].eq(1), "y_diff"] = (
+        throws.loc[throws["possession_num"].eq(1), "ReceiverY"]
+        - throws.loc[throws["possession_num"].eq(1), "ThrowerY"]
+    )
+
+    low_end_zone = throws.iloc[:1].copy()
+    low_end_zone["possession_num"] = 4
+    low_end_zone["quarter_point"] = 4
+    low_end_zone["ThrowerY"] = 60
+    low_end_zone["ReceiverY"] = 20
+    low_end_zone["y_diff"] = -40
+
+    possessions, _ = build_possessions(
+        pd.concat([throws, low_end_zone], ignore_index=True),
+        team_id="glory",
+        outcomes=("goal",),
+    )
+
+    assert set(possessions["possession_num"]) == {1, 2, 3, 4}
+    assert possessions.loc[possessions["possession_num"].eq(1), "end_y"].iloc[0] == 100
+    assert possessions.loc[possessions["possession_num"].eq(4), "end_y"].iloc[0] == 20
+
+
 def test_middle_selection_centers_ranked_window_and_aligns_paths():
     possessions = pd.DataFrame(
         {

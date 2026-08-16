@@ -420,12 +420,9 @@ def plot_team_throw_count_distribution(
 
     y_labels = []
     for team_id in team_order:
-        total_possessions = int(totals.get(team_id, 0))
-        possession_label = "possession" if total_possessions == 1 else "possessions"
         y_labels.append(
             f"{team_id.title()} (mode "
-            f"{int(mode_lookup.loc[team_id, 'mode_throw_count'])}, "
-            f"{total_possessions:,} {possession_label})"
+            f"{int(mode_lookup.loc[team_id, 'mode_throw_count'])})"
         )
     customdata = []
     for team_id in team_order:

@@ -83,7 +83,11 @@ def _possession_outcome(path: pd.DataFrame) -> str:
     if _is_turnover_throw(final_throw):
         return "turnover"
     final_y = pd.to_numeric(pd.Series([final_throw.get("ReceiverY")]), errors="coerce").iloc[0]
-    if pd.notna(final_y) and final_y > ENDZONE_HIGH_Y:
+    # Shown Space coordinates include the end-zone boundary itself, and a
+    # possession can score toward either end of the field.
+    if pd.notna(final_y) and (
+        final_y <= ENDZONE_LOW_Y or final_y >= ENDZONE_HIGH_Y
+    ):
         return "goal"
     return "unknown"
 

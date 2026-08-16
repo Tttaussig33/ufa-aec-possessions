@@ -83,8 +83,8 @@ def test_team_throw_count_distribution_uses_team_share():
     assert len(fig.data) == 1
     heatmap = fig.data[0]
     assert list(heatmap.x) == [3, 4, 5, 6, 7, 8]
-    assert "Glory (mode 3, 1 possession)" in list(heatmap.y)
-    assert "Empire (mode 5, 3 possessions)" in list(heatmap.y)
-    empire_index = list(heatmap.y).index("Empire (mode 5, 3 possessions)")
+    assert "Glory (mode 3)" in list(heatmap.y)
+    assert "Empire (mode 5)" in list(heatmap.y)
+    empire_index = list(heatmap.y).index("Empire (mode 5)")
     throw_five_index = list(heatmap.x).index(5)
     assert heatmap.z[empire_index][throw_five_index] == 2 / 3
